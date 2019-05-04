@@ -4,12 +4,17 @@ import dump from '../dump.mjs';
 import puppeteer from "puppeteer";
 import progress from "progress";
 import request from 'request';
-import fs, { promises } from 'fs';
+import fs from 'fs';
 
 let cookie = ""
 let email = ""
 let password = ""
 let main = async() => {
+
+
+  if (!fs.existsSync("./videos")) {
+    fs.mkdirSync("./videos");
+  }
 
   console.log(chalk.red.bold("raywenderlich Crawler -- FREE WEEKEND"))
 
@@ -51,8 +56,8 @@ let main = async() => {
 
       await processArray(dump, async(e, k) => {
         await gettingVideos(e)
-        return "complete";
       });
+      return "complete";
 
       console.log(chalk.green.bold("Baixou Tudoooooo!!"))
 
@@ -155,6 +160,18 @@ let gettingVideos = async(uri) => {
       title = "",
       mp4 = "";
     await page.goto(e)
+
+    // const material = await page.evaluate(() => {
+    //   let src = document.querySelector('.l-flex-justify-right');
+    //   if (src) {
+    //     src = src.innerHTML
+    //   } else {
+    //     src = null
+    //   }
+    //   return src
+    // });
+    // console.log(material)
+
     await page.waitForSelector('iframe[src*="player.vimeo.com"]');
     const vimeoSource = await page.evaluate(() => {
       let src = document.querySelector('iframe[src*="player.vimeo.com"]').src;
@@ -176,13 +193,21 @@ let gettingVideos = async(uri) => {
       mp4 = video.request.files.progressive.sort((a, b) => b.width - a.width)[0];
 
     }
-    return { video, title, mp4 }
+    return {
+      video,
+      title,
+      mp4
+    }
   })
 
 
 
   await processArray(datasMp4, async(e, k) => {
-    await download(e.mp4, e.title, folder)
+    await download(e.mp4, e.title, folder, "mp4")
+      // if (e.material) {
+      //   await download(e.material, e.title + "_material", folder, "zip")
+
+    // }
     return "complete"
   })
 
@@ -192,7 +217,7 @@ let gettingVideos = async(uri) => {
   return "complete";
 }
 
-let download = (url, title, folder) => {
+let download = (url, title, folder, type = "mp4") => {
   return new Promise((resolve, reject) => {
 
     if (!fs.existsSync("./videos/" + folder)) {
@@ -200,7 +225,7 @@ let download = (url, title, folder) => {
     }
 
     var req = request(url);
-    const file = fs.createWriteStream("./videos/" + folder + "/" + title + ".mp4");
+    const file = fs.createWriteStream("./videos/" + folder + "/" + title + "." + type);
 
     req.on('response', (res) => {
       var len = parseInt(res.headers['content-length'], 10);
