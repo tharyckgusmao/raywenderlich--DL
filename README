@@ -1,4 +1,37 @@
+# Skill-Share-Crawler---DL
+
+Crawler to Download videos from the raywenderlich platform Suport Automatic auth based in dump free weekend.
+
+## IMPORTANT
+
+We do not support piracy !! DO NOT DISCLOSE OR SELL THE VIDEOS !!
+
+## ABOUT
+
+Crawler with purpose to Download videos of the platform Raywenderlich, possibility of download by all Courses and Screencast Videos.
+
+
+### Prerequisites
+
+node >= v8 
+tested in node v12.1
+
+### Installing
+
+Follow the steps below for use:
+
+
+```
 npm install
+```
 
+### Exec
+
+```
 npm run start
+```
 
+## Authors
+
+* **Tharyck Gusmao** - *Initial work*
+  
