@@ -1,10 +1,13 @@
 import chalk from 'chalk';
 import inquirer from 'inquirer'
 import dump from '../dump.mjs';
+import android from '../android.mjs';
+import screencast from '../screencast.mjs';
 import puppeteer from "puppeteer";
 import progress from "progress";
 import request from 'request';
 import fs from 'fs';
+import rimraf from 'rimraf';
 
 let cookie = ""
 let email = ""
@@ -31,35 +34,67 @@ let main = async() => {
       }
 
     ])
-    .then(async answers => {
+    .then(async an => {
+
+      inquirer
+        .prompt([{
+          type: 'list',
+          name: 'dump',
+          message: 'O que quer baixar ?',
+          choices: ['Tudo', 'screencast', 'android'],
+          filter: function(val) {
+            return val.toLowerCase();
+          }
+        }])
+        .then(async answers => {
+          let dp = dump;
+          let type = "all"
+          if (answers.dump.toLowerCase() == "android") {
+
+            dp = android;
+            type = "android"
+
+          } else if (answers.dump.toLowerCase() == "screencast") {
 
 
-      email = answers.email;
-      password = answers.password
+            dp = screencast;
+            type = "screencast"
 
-      console.log(chalk.green.bold("Authenticando"))
+          }
 
-      const browser = await puppeteer.launch({
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-web-security']
-      });
-      const page = await browser.newPage();
-      await page.goto("https://www.raywenderlich.com/sessions/new")
-      await page.type('input[name=username]', email)
-      await page.type('input[name=password]', password)
-      await page.click('button[type=submit]')
-      await page.waitForNavigation();
-      cookie = await page.cookies()
-      await page.close();
-      await browser.close();
-      console.log(chalk.green.bold("Raspando Cursos!!"))
+          email = an.email;
+          password = an.password
 
-      await processArray(dump, async(e, k) => {
-        await gettingVideos(e)
-      });
-      return "complete";
+          console.log(chalk.green.bold("Authenticando"))
 
-      console.log(chalk.green.bold("Baixou Tudoooooo!!"))
+          const browser = await puppeteer.launch({
+            headless: true,
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-web-security']
+          });
+          const page = await browser.newPage();
+          await page.goto("https://www.raywenderlich.com/sessions/new")
+          await page.type('input[name=username]', email)
+          await page.type('input[name=password]', password)
+          await page.click('button[type=submit]')
+          await page.waitForNavigation();
+          cookie = await page.cookies()
+          await page.close();
+          await browser.close();
+          console.log(chalk.green.bold("Raspando Cursos!!"))
+
+
+          await processArray(dp, async(e, k) => {
+            let folder = e.split("/")
+            folder = folder[folder.length - 1]
+
+            await gettingVideos(e, type, folder)
+          });
+          return "complete";
+
+          console.log(chalk.green.bold("Baixou Tudoooooo!!"))
+
+
+        });
 
     });
 
@@ -113,13 +148,12 @@ let main = async() => {
 //   }
 // ]
 
-let gettingVideos = async(uri) => {
+let gettingVideos = async(uri, type, folder) => {
 
 
 
 
-  let folder = uri.split("/")
-  folder = folder[folder.length - 1]
+
 
   console.log(chalk.red.bold(folder))
 
@@ -138,27 +172,37 @@ let gettingVideos = async(uri) => {
 
 
   const lessons = await page.evaluate((uri) => {
-    let course = document.querySelector(".c-box-list.c-box-list--linked.c-video-player__lesson-list.c-video-player__lesson-list--open");
-    let data = []
-    if (course) {
 
-      data = [...document.querySelector(".c-box-list.c-box-list--linked.c-video-player__lesson-list.c-video-player__lesson-list--open").children].map((e, k) => uri + "/lessons/" + (k + 1))
+    let test = document.querySelector(".c-video-player__lessons-title").innerText
 
+
+    if (test.toLowerCase().indexOf("screencast") > -1) {
+
+      data = [uri]
 
     } else {
-
-      data = [...document.querySelector(".c-tutorial--card.c-tutorial--dark.l-margin-24").querySelectorAll("a")].map(e => "https://www.raywenderlich.com/" + e.pathname)
-
+      data = [...document.querySelectorAll("li[data-track-progress-content-id]")].map((e, k) => uri + "/lessons/" + (k + 1))
 
     }
 
-    return data
+    return { data, test }
   }, uri)
 
-  let datasMp4 = await processArray(lessons, async(e, k) => {
+  let datasMp4 = await processArray(lessons.data, async(e, k) => {
     let video = "",
       title = "",
       mp4 = "";
+    if (lessons.test.toLowerCase().indexOf("screencast") > -1) {
+
+      if (fs.existsSync("./videos/" + folder)) {
+
+        rimraf.sync("./videos/" + folder);
+      }
+
+    }
+
+
+
     await page.goto(e)
 
     // const material = await page.evaluate(() => {
@@ -201,7 +245,6 @@ let gettingVideos = async(uri) => {
   })
 
 
-
   await processArray(datasMp4, async(e, k) => {
     await download(e.mp4, e.title, folder, "mp4")
       // if (e.material) {
@@ -219,40 +262,48 @@ let gettingVideos = async(uri) => {
 
 let download = (url, title, folder, type = "mp4") => {
   return new Promise((resolve, reject) => {
-
     if (!fs.existsSync("./videos/" + folder)) {
       fs.mkdirSync("./videos/" + folder);
     }
 
-    var req = request(url);
-    const file = fs.createWriteStream("./videos/" + folder + "/" + title + "." + type);
+    if (!fs.existsSync("./videos/" + folder + "/" + title + "." + type)) {
+      var req = request(url);
+      const file = fs.createWriteStream("./videos/" + folder + "/" + title + "." + type);
 
-    req.on('response', (res) => {
-      var len = parseInt(res.headers['content-length'], 10);
+      req.on('response', (res) => {
+        var len = parseInt(res.headers['content-length'], 10);
 
-      var bar = new progress('  downloading [:bar] :rate/bps :percent :etas', {
-        complete: '=',
-        incomplete: ' ',
-        width: 20,
-        total: len
-      });
-
-      res.on('data', (chunk) => {
-        bar.tick(chunk.length);
-      });
-
-      res.on('end', () => {
-        resolve({
-          statusCode: res.statusCode,
-          status: "Complete"
+        var bar = new progress('  downloading [:bar] :rate/bps :percent :etas', {
+          complete: '=',
+          incomplete: ' ',
+          width: 20,
+          total: len
         });
 
+        res.on('data', (chunk) => {
+          bar.tick(chunk.length);
+        });
+
+        res.on('end', () => {
+          resolve({
+            statusCode: res.statusCode,
+            status: "Complete"
+          });
+
+        });
+        res.pipe(file);
+
       });
-      res.pipe(file);
 
-    });
+      req.end();
 
-    req.end();
+    } else {
+      resolve({
+        statusCode: 200,
+        status: "Complete"
+      });
+    }
+
 
   })
 
